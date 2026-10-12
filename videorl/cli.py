@@ -1,9 +1,65 @@
 import argparse
+import os
+import subprocess
 import sys
 from pathlib import Path
 
 from videorl import rules
 from videorl.util import analysis_dir_for, die, log, read_json, response_path_for, write_json
+
+REPO_URL = "https://github.com/0xblaize/Videorl-analysist.git"
+
+
+def _find_repo() -> Path | None:
+    env = os.environ.get("VIDEORL_REPO", "")
+    cands = []
+    if env:
+        cands.append(Path(env))
+    here = Path(__file__).resolve()
+    cands.extend(here.parents)
+    cands.append(Path.home() / "Projects" / "videorl-analyst")
+    for p in cands:
+        try:
+            if (p / ".git").exists() and (p / "pyproject.toml").exists() and (p / "videorl").is_dir():
+                return p
+        except Exception:
+            continue
+    return None
+
+
+def cmd_update(_args) -> int:
+    log("checking for a newer videorl...")
+    try:
+        repo = _find_repo()
+        if repo:
+            r = subprocess.run(["git", "-C", str(repo), "pull", "--ff-only"],
+                               capture_output=True, text=True, timeout=120)
+            if r.returncode != 0:
+                log(f"{repo} has local edits — commit or stash them, then run videorl --update again")
+                return 1
+            subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--quiet",
+                            "--no-deps", "-e", str(repo)],
+                           capture_output=True, text=True, timeout=300)
+            head = subprocess.run(["git", "-C", str(repo), "log", "-1", "--format=%h %s"],
+                                  capture_output=True, text=True, timeout=30)
+            where = head.stdout.strip() if head.returncode == 0 else "latest"
+        else:
+            log("installing the latest version from github...")
+            r = subprocess.run([sys.executable, "-m", "pip", "install", "--user", "--quiet",
+                                "--no-deps", f"git+{REPO_URL}"],
+                               capture_output=True, text=True, timeout=600)
+            if r.returncode != 0:
+                log("update failed — no connection to github, or pip had a problem")
+                log("your current version is untouched; try again later")
+                return 1
+            where = "latest from github"
+        log(f"videorl is now on {where}")
+        log("re-run your command to use the new version")
+        return 0
+    except Exception:
+        log("update failed — check your connection and try again")
+        log("your current version is untouched")
+        return 1
 
 
 def cmd_analyze(args) -> int:
@@ -172,7 +228,9 @@ def cmd_status(args) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="videorl", description="VideoRL v7 symbolic video question pipeline")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    ap.add_argument("--update", action="store_true",
+                    help="pull the latest version from github")
+    sub = ap.add_subparsers(dest="cmd", required=False)
 
     a = sub.add_parser("analyze", help="stage 1: deep analysis + symbolic readings")
     a.add_argument("video", help="mp4 file or URL (run from the folder holding the file)")
@@ -200,6 +258,11 @@ def main(argv=None) -> int:
     s.set_defaults(func=cmd_status)
 
     args = ap.parse_args(argv)
+    if getattr(args, "update", False):
+        return cmd_update(args)
+    if not getattr(args, "func", None):
+        ap.print_help()
+        return 1
     try:
         return args.func(args)
     except KeyboardInterrupt:
