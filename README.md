@@ -100,7 +100,17 @@ EOF
 chmod 600 ~/.videorl_providers.json
 ```
 
-Either key alone is enough. It uses OpenRouter's main vision model first, then Groq's, and jumps between them on its own when one is out of quota, has no credit, or rejects a model — you never see those errors, only one short line when it switches.
+Groq is the main model for text calls (question drafts, merging, distractors). Image calls go through OpenRouter's free vision models, then any free vision keys below, and only touch the paid `gpt-4o-mini` as a last resort. When a route is dry or busy you never see the error — one short line, it moves on.
+
+Optional free vision keys (all no credit card) — add any of these to the same file and it joins the front of the image chain automatically:
+
+| Key name in the file | Sign up at | Model used |
+|---|---|---|
+| `"nvidia"` | build.nvidia.com/settings | `meta/llama-3.2-90b-vision-instruct` |
+| `"cloudflare"` | dash.cloudflare.com → API Tokens | `@cf/meta/llama-3.2-11b-vision-instruct` (value: `"account_id:token"`) |
+| `"sambanova"` | cloud.sambanova.ai | `gemma-4-31B-it-preview` |
+
+Full example: `{"openrouter": "...", "groq": "...", "nvidia": "nvapi-...", "cloudflare": "abc123:token...", "sambanova": "..."}` — each key is optional; only the ones present are used.
 
 Change models any time via env: `VIDEORL_OPENROUTER_MODEL`, `VIDEORL_GROQ_MODEL`, or point at any OpenAI-compatible API with `VIDEORL_BASE_URL` + `VIDEORL_MODEL` + `VIDEORL_API_KEY`.
 

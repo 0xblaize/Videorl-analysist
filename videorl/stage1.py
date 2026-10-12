@@ -95,7 +95,7 @@ def run_stage1(source: str, workdir: Path | None = None) -> dict:
 
     client = VLMClient()
     if not client.available():
-        raise SystemExit("no API key found (VIDEORL_API_KEY or opencode auth.json)")
+        raise SystemExit("no API key set — put your keys in ~/.videorl_providers.json (openrouter and/or groq)")
 
     captions = read_json(adir / "captions.json")
     if captions is None:
