@@ -2,10 +2,10 @@ import random
 import re
 
 from videorl.options import evidence_frame_sheet
-from videorl.util import log
+from videorl.util import extract_json, log
 from videorl.vlm import VLMClient
 
-PROMPT = """You are answering a hard multiple-choice question about a film. The attached contact sheet shows frames from the evidence ranges (labels show which range). Choose the option that best matches what the film establishes symbolically.
+PROMPT = """You are answering a hard multiple-choice question about a film. The attached contact sheet shows frames from the proof times (labels show which range). Choose the option that best matches what the film establishes symbolically.
 
 Question: {question}
 
@@ -27,51 +27,56 @@ def run_difficulty(
 ) -> dict:
     sheet = evidence_frame_sheet(video, evidence_lines, workdir, "difficulty")
     rng = random.Random()
-    results = []
-    correct_picks = 0
-    for i in range(runs):
+    setups = []
+    for _ in range(runs):
         order = list(range(1, len(options) + 1))
         rng.shuffle(order)
         lines = []
         true_pos = None
         for pos, num in enumerate(order, 1):
-            o = options[num - 1]
-            lines.append(f"{pos}. {o['text']}")
+            lines.append(f"{pos}. {options[num - 1]['text']}")
             if num == correct_number:
                 true_pos = pos
-        log(f"difficulty run {i + 1}/{runs}")
-        try:
-            raw = client.chat(
-                PROMPT.format(question=question, options="\n".join(lines)),
-                images=[sheet] if sheet else None,
-                max_tokens=150,
-                temperature=0.7,
-                tag=f"difficulty-{i + 1}",
-            )
-        except Exception as e:
-            log(f"  run failed: {e}")
+        setups.append({"order": order, "true_pos": true_pos})
+    log(f"asking {runs} difficulty runs (3 at a time)...")
+    calls = [
+        dict(
+            prompt=PROMPT.format(question=question, options="\n".join(
+                f"{pos}. {options[num - 1]['text']}" for pos, num in enumerate(s["order"], 1)
+            )),
+            images=[sheet] if sheet else None,
+            max_tokens=150,
+            temperature=0.7,
+            tag=f"difficulty-{i + 1}",
+        )
+        for i, s in enumerate(setups)
+    ]
+    results = client.chat_many(calls, workers=3)
+    out = []
+    correct_picks = 0
+    for i, (raw, s) in enumerate(zip(results, setups), 1):
+        if isinstance(raw, Exception) or not raw:
+            log(f"  run {i} failed: {raw}")
             continue
-        from videorl.util import extract_json
-
-        data = extract_json(raw)
+        data = extract_json(str(raw))
         try:
             pick = int((data or {}).get("pick", 0))
         except Exception:
-            m = re.search(r"\d+", raw)
+            m = re.search(r"\d+", str(raw))
             pick = int(m.group()) if m else 0
-        picked_num = order[pick - 1] if 1 <= pick <= len(order) else 0
+        picked_num = s["order"][pick - 1] if 1 <= pick <= len(s["order"]) else 0
         hit = picked_num == correct_number
         correct_picks += 1 if hit else 0
-        results.append({"run": i + 1, "pick_position": pick, "picked_option_number": picked_num, "hit": hit})
-        log(f"  picked option {picked_num} ({'HIT' if hit else 'miss'})")
+        out.append({"run": i, "pick_position": pick, "picked_option_number": picked_num, "hit": hit})
+        log(f"  run {i}: picked option {picked_num} ({'HIT' if hit else 'miss'})")
     passed = correct_picks <= 2
     summary = {
         "runs_attempted": runs,
-        "runs_completed": len(results),
+        "runs_completed": len(out),
         "correct_picks": correct_picks,
         "pass": passed,
         "threshold": "correct picked <= 2 of 8",
-        "results": results,
+        "results": out,
     }
-    log(f"difficulty: correct picked {correct_picks}/{len(results)} -> {'PASS' if passed else 'FAIL'}")
+    log(f"difficulty: correct picked {correct_picks}/{len(out)} -> {'PASS' if passed else 'FAIL'}")
     return summary

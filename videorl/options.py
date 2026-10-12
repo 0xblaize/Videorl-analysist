@@ -96,22 +96,25 @@ def evidence_frame_sheet(video: Path, evidence_lines: list[str], workdir: Path, 
 
 def blind_answers(client: VLMClient, video: Path, question: str, evidence_lines: list[str], workdir: Path, n: int = 8) -> list[dict]:
     sheet = evidence_frame_sheet(video, evidence_lines, workdir, "blind")
+    prompt = BLIND_PROMPT.format(question=question, style=STYLE)
+    log(f"asking {n} blind answers (3 at a time)...")
+    calls = [
+        dict(
+            prompt=prompt,
+            images=[sheet] if sheet else None,
+            max_tokens=250,
+            temperature=0.5 + 0.1 * (i % 3),
+            tag=f"blind-{i + 1}",
+        )
+        for i in range(n)
+    ]
+    results = client.chat_many(calls, workers=3)
     answers = []
-    for i in range(n):
-        log(f"blind answer {i + 1}/{n}")
-        prompt = BLIND_PROMPT.format(question=question, style=STYLE)
-        try:
-            raw = client.chat(
-                prompt,
-                images=[sheet] if sheet else None,
-                max_tokens=250,
-                temperature=0.5 + 0.1 * (i % 3),
-                tag=f"blind-{i + 1}",
-            )
-        except Exception as e:
-            log(f"  blind run {i + 1} failed: {e}")
+    for i, raw in enumerate(results):
+        if isinstance(raw, Exception) or not raw:
+            log(f"  blind run {i + 1} failed: {raw}")
             continue
-        text = " ".join(raw.strip().split())
+        text = " ".join(str(raw).strip().split())
         answers.append({"run": i + 1, "answer": text})
         log(f"  -> {text[:110]}")
     return answers

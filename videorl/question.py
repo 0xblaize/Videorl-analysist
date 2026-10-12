@@ -49,9 +49,14 @@ def draft(client: VLMClient, candidate: dict, duration: float) -> dict:
     )
     for attempt in range(3):
         log(f"drafting question (attempt {attempt + 1})...")
-        raw = client.chat(prompt, max_tokens=1500, temperature=0.4, tag="question-draft")
+        try:
+            raw = client.chat(prompt, max_tokens=3000, temperature=0.4, tag="question-draft")
+        except Exception as e:
+            log(f"  attempt {attempt + 1} failed: {e}")
+            continue
         data = extract_json(raw)
         if not isinstance(data, dict) or not data.get("question"):
+            log(f"  attempt {attempt + 1}: reply was truncated or not JSON, retrying. Reply starts: {str(raw)[:120]}")
             continue
         q = str(data["question"]).strip()
         ev = [str(x).strip() for x in data.get("evidence_lines", [])]

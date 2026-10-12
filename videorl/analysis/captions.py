@@ -5,15 +5,15 @@ from videorl.vlm import VLMClient
 
 PROMPT = """You are watching a film shot by shot. The contact sheet shows {n} frames, each labeled like "#12 3:40-3:52" (scene index, time range). Below is the dialogue transcript for roughly this stretch of the film.
 
-For EVERY labeled scene on the sheet, output strict JSON:
-{{"scenes": [{{"idx": <int>, "setting": <string, where>, "people": <string, who is visible>, "action": <string, what happens>, "objects": <string, notable objects/props>, "visual_notes": <string, color, framing, mood, camera>, "dialogue_context": <string, one line tying nearby dialogue to this scene or empty>}}]}}
+For EVERY labeled scene on the sheet, output strict JSON (keep every field to max 12 words):
+{{"scenes": [{{"idx": <int>, "setting": <where>, "people": <who>, "action": <what happens>, "objects": <notable props>, "visual_notes": <color, framing, mood>, "dialogue_context": <tie to nearby dialogue or empty>}}]}}
 
-Rules: describe only what the frames and transcript support. Notice recurring objects, costumes, locations, colors, and any deliberate visual motif. No speculation about meaning yet."""
+Describe only what the frames and transcript support. Notice recurring objects, costumes, locations, colors, and any deliberate visual motif. No speculation about meaning yet."""
 
 PROMPT_NO_AUDIO = """You are watching a film shot by shot. The contact sheet shows {n} frames, each labeled like "#12 3:40-3:52" (scene index, time range).
 
-For EVERY labeled scene on the sheet, output strict JSON:
-{{"scenes": [{{"idx": <int>, "setting": <string>, "people": <string>, "action": <string>, "objects": <string>, "visual_notes": <string>}}]}}
+For EVERY labeled scene on the sheet, output strict JSON (keep every field to max 12 words):
+{{"scenes": [{{"idx": <int>, "setting": <where>, "people": <who>, "action": <what happens>, "objects": <notable props>, "visual_notes": <color, framing, mood>}}]}}
 
 Describe only what the frames support. Notice recurring objects, costumes, locations, colors, and deliberate visual motifs."""
 
@@ -46,7 +46,7 @@ def caption_sheets(
             )
         prompt += "\n\nScene labels on the sheet:\n" + "\n".join(e["label"] for e in sheet["entries"])
         log(f"captions sheet {i}/{len(sheets)} (scenes {sheet['scene_from']}-{sheet['scene_to']})")
-        raw = client.chat(prompt, images=[sheet["sheet"]], max_tokens=3000, temperature=0.2, tag="captions")
+        raw = client.chat(prompt, images=[sheet["sheet"]], max_tokens=1600, temperature=0.2, tag="captions")
         data = extract_json(raw)
         scenes = (data or {}).get("scenes", []) if isinstance(data, dict) else []
         if not isinstance(scenes, list):

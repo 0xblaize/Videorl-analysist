@@ -131,3 +131,25 @@ class VLMClient:
             log(f"{tag}: HTTP {r.status_code}, backing off {wait}s (attempt {attempt + 1})")
             time.sleep(wait)
         raise RuntimeError(f"VLM call failed [{tag}]: {last_err}")
+
+    def chat_many(self, prompts: list[dict], workers: int = 3) -> list:
+        from concurrent.futures import ThreadPoolExecutor
+        import time as _t
+
+        results = [None] * len(prompts)
+
+        def one(i: int, kw: dict) -> None:
+            try:
+                results[i] = self.chat(**kw)
+            except Exception as e:
+                results[i] = e
+
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = []
+            for i, kw in enumerate(prompts):
+                futs.append(ex.submit(one, i, kw))
+                if i < len(prompts) - 1:
+                    _t.sleep(max(1.5, config.RATE_LIMIT_SECONDS / 3))
+            for f in futs:
+                f.result()
+        return results

@@ -72,18 +72,26 @@ def transcribe(wav_path: Path) -> list[dict]:
     from faster_whisper import WhisperModel
 
     log(f"transcribing with faster-whisper ({config.WHISPER_MODEL}, int8, cpu)...")
-    model = WhisperModel(config.WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=2)
+    model = WhisperModel(config.WHISPER_MODEL, device="cpu", compute_type="int8", cpu_threads=4)
     audio_arr, sr = _load_wav(wav_path)
     if sr != 16000:
         idx = np.linspace(0, len(audio_arr) - 1, int(len(audio_arr) * 16000 / sr)).astype(np.int64)
         audio_arr = audio_arr[idx]
-    segments, info = model.transcribe(audio_arr, vad_filter=True, beam_size=1)
+    segments, info = model.transcribe(
+        audio_arr,
+        vad_filter=True,
+        beam_size=1,
+        language="en",
+        condition_on_previous_text=False,
+    )
     out = []
     for seg in segments:
         text = seg.text.strip()
         if not text:
             continue
         out.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": text})
+        if len(out) % 20 == 0:
+            log(f"  transcript at {int(seg.end // 60)}:{int(seg.end % 60):02d} of film...")
     log(f"transcript: {len(out)} segments, language={info.language}")
     return out
 

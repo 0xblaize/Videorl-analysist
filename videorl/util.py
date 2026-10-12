@@ -98,7 +98,7 @@ def slugify(name: str) -> str:
 
 
 def analysis_dir_for(video_path: Path) -> Path:
-    work = HOME / "Downloads" / "videorl_work" / slugify(video_path.name)
+    work = HOME / ".cache" / "videorl" / "work" / slugify(video_path.name)
     work.mkdir(parents=True, exist_ok=True)
     return work
 

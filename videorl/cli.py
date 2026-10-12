@@ -115,7 +115,7 @@ def _find_analysis(video_arg: str):
         adir = analysis_dir_for(p.resolve())
         if (adir / "meta.json").exists():
             yield adir / "meta.json"
-    cache_root = Path.home() / "Downloads" / "videorl_work"
+    cache_root = Path.home() / ".cache" / "videorl" / "work"
     if cache_root.exists():
         for d in sorted(cache_root.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
             if (d / "meta.json").exists():

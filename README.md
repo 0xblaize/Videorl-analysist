@@ -20,10 +20,12 @@ videorl run videoname.mp4
 6. Runs the 8-run difficulty check (needs correct picked ≤2 of 8)
 7. Saves everything into one file
 
-**Output (always in your Downloads folder):**
+**Output:**
 
-- `~/Downloads/videoname.txt` — the full Step 1–10 package, nothing else
-- `~/Downloads/videorl_work/videoname/` — all working files (frames, sheets, transcript, json)
+- `~/Downloads/videoname.txt` — the full Step 1–10 package. **This is the only file ever written to Downloads.**
+- Working files (frames, sheets, transcript, json) live in the hidden cache `~/.cache/videorl/work/` and never clutter your folders.
+
+**Speed:** a 20-minute video takes about 5–10 minutes (whisper transcribes while scenes are being detected, question/difficulty answers run 3 at a time). Ctrl-C any time — re-running the same command resumes where it stopped, nothing is redone.
 
 ---
 
@@ -89,20 +91,17 @@ videorl run videoname.mp4
 
 ## API key (one time)
 
-The tool needs a vision model. It reads your UnoRouter key from
-`~/.local/share/opencode/auth.json` automatically. To set it yourself:
+The tool needs a vision model. Put your Gemini key in a file:
 
 ```bash
-# Linux / macOS
-export VIDEORL_API_KEY="your-key-here"
+echo "your-key-here" > ~/.videorl_key && chmod 600 ~/.videorl_key
 ```
 
-```powershell
-# Windows PowerShell
-$env:VIDEORL_API_KEY = "your-key-here"
-```
+It also picks up a key automatically from `VIDEORL_API_KEY`, `GEMINI_API_KEY`, or your opencode `auth.json` — no setup needed if you already have one.
 
-Default model: `gemini-3.1-flash-lite:free` (free tier: 1 message per minute — a full run takes 25–45 minutes and prints live progress). Change model any time:
+**Default path:** Google Gemini `gemini-3.8-flash`, ~4.5s between calls. **Fallback** (no key file found): UnoRouter `gemini-3.1-flash-lite:free`, free tier at 1 message/minute — a full run takes 25–45 minutes and still prints live progress.
+
+Change model any time:
 
 ```bash
 export VIDEORL_MODEL="your-model-name"
@@ -128,6 +127,8 @@ Everything saved in /home/you/Downloads/videoname.txt
 
 Paste that txt into the platform. A URL works too: `videorl run https://example.com/video.mp4`
 
+Interrupted or failed halfway? Run the same command again — finished steps are detected and skipped.
+
 **Other commands:**
 
 ```
@@ -140,11 +141,12 @@ videorl status                    # shows what is done for each video
 
 | Env var | Default | Meaning |
 |---|---|---|
-| VIDEORL_API_KEY | from opencode auth.json | API key |
-| VIDEORL_MODEL | gemini-3.1-flash-lite:free | vision model |
-| VIDEORL_BASE_URL | https://api.unorouter.com/v1 | API address |
-| VIDEORL_WHISPER | base | transcript size (tiny/fast … small/base/better) |
-| VIDEORL_RATE_LIMIT | 63 | seconds between model calls |
+| VIDEORL_API_KEY | from ~/.videorl_key | API key |
+| VIDEORL_MODEL | gemini-3.8-flash | vision model |
+| VIDEORL_BASE_URL | https://generativelanguage.googleapis.com/v1beta/openai | API address |
+| VIDEORL_RATE_LIMIT | 4.5 | seconds between model calls |
+| VIDEORL_WHISPER | tiny | transcript size (tiny/fast … small/base/better) |
+| VIDEORL_TIMEOUT | 240 | seconds before a model call is retried |
 
 ---
 
@@ -154,6 +156,7 @@ videorl status                    # shows what is done for each video
 - Self-contained — no "which of the following"
 - More than 30 seconds of proof time, more than one moment
 - One clearly best answer; distractors are half-right, one small change each
+- Question and options pass a style check (no filler, no "is showing"-style progressive verbs)
 - Difficulty check must land on the correct option 2 times or fewer out of 8
 
 Builder: **blaize**

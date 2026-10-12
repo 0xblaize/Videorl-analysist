@@ -5,22 +5,31 @@ from pathlib import Path
 HOME = Path.home()
 AUTH_JSON = HOME / ".local" / "share" / "opencode" / "auth.json"
 OPencode_CFG = HOME / ".config" / "opencode" / "opencode.json"
+KEY_FILE = HOME / ".videorl_key"
 
-DEFAULT_BASE_URL = os.environ.get("VIDEORL_BASE_URL", "https://api.unorouter.com/v1")
-DEFAULT_MODEL = os.environ.get("VIDEORL_MODEL", "gemini-3.1-flash-lite:free")
-ANSWERER_MODEL = os.environ.get("VIDEORL_ANSWERER_MODEL", DEFAULT_MODEL)
-RATE_LIMIT_SECONDS = float(os.environ.get("VIDEORL_RATE_LIMIT", "63"))
-REQUEST_TIMEOUT = float(os.environ.get("VIDEORL_TIMEOUT", "180"))
+GOOGLE_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
+GOOGLE_MODEL = "gemini-3.8-flash"
+
+DEFAULT_BASE_URL = os.environ.get("VIDEORL_BASE_URL", "")
+DEFAULT_MODEL = os.environ.get("VIDEORL_MODEL", "")
+ANSWERER_MODEL = os.environ.get("VIDEORL_ANSWERER_MODEL", "")
+_RATE_ENV = os.environ.get("VIDEORL_RATE_LIMIT", "")
+REQUEST_TIMEOUT = float(os.environ.get("VIDEORL_TIMEOUT", "240"))
 MAX_RETRIES = int(os.environ.get("VIDEORL_MAX_RETRIES", "6"))
 FRAME_MAX_W = int(os.environ.get("VIDEORL_FRAME_MAX_W", "768"))
 JPEG_QUALITY = int(os.environ.get("VIDEORL_JPEG_Q", "80"))
-WHISPER_MODEL = os.environ.get("VIDEORL_WHISPER", "base")
+WHISPER_MODEL = os.environ.get("VIDEORL_WHISPER", "tiny")
 
 
 def _read_key() -> str:
-    env_key = os.environ.get("VIDEORL_API_KEY")
-    if env_key:
-        return env_key
+    for getter in (
+        lambda: os.environ.get("VIDEORL_API_KEY"),
+        lambda: os.environ.get("GEMINI_API_KEY"),
+        lambda: KEY_FILE.read_text().strip() if KEY_FILE.exists() else "",
+    ):
+        k = getter()
+        if k:
+            return k.strip()
     if AUTH_JSON.exists():
         try:
             auth = json.loads(AUTH_JSON.read_text())
@@ -43,3 +52,34 @@ def _read_key() -> str:
 
 
 API_KEY = _read_key()
+_USING_GOOGLE = (GOOGLE_BASE in DEFAULT_BASE_URL) or (
+    not DEFAULT_BASE_URL and (KEY_FILE.exists() or bool(os.environ.get("GEMINI_API_KEY")))
+)
+
+
+def _pick_base() -> str:
+    if DEFAULT_BASE_URL:
+        return DEFAULT_BASE_URL
+    if _USING_GOOGLE:
+        return GOOGLE_BASE
+    return "https://api.unorouter.com/v1"
+
+
+def _pick_model() -> str:
+    if DEFAULT_MODEL:
+        return DEFAULT_MODEL
+    if _USING_GOOGLE:
+        return GOOGLE_MODEL
+    return "gemini-3.1-flash-lite:free"
+
+
+def _pick_rate() -> float:
+    if _RATE_ENV:
+        return float(_RATE_ENV)
+    return 4.5 if _USING_GOOGLE else 63.0
+
+
+DEFAULT_BASE_URL = _pick_base()
+DEFAULT_MODEL = _pick_model()
+ANSWERER_MODEL = ANSWERER_MODEL or DEFAULT_MODEL
+RATE_LIMIT_SECONDS = _pick_rate()

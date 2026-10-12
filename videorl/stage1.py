@@ -83,7 +83,7 @@ def run_stage1(source: str, workdir: Path | None = None) -> dict:
     scenes = read_json(adir / "scenes.json")
     sheets = read_json(adir / "sheets.json")
     if sheets is None:
-        per = max(16, ((len(scenes) + 11) // 12))
+        per = max(20, ((len(scenes) + 7) // 8))
         per = (per + 3) // 4 * 4
         sheets = frames.make_contact_sheets(scenes, adir / "contact_sheets", per_sheet=per)
         write_json(adir / "sheets.json", sheets)
