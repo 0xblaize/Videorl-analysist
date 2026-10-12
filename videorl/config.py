@@ -15,7 +15,15 @@ FRAME_MAX_W = int(os.environ.get("VIDEORL_FRAME_MAX_W", "768"))
 JPEG_QUALITY = int(os.environ.get("VIDEORL_JPEG_Q", "80"))
 WHISPER_MODEL = os.environ.get("VIDEORL_WHISPER", "tiny")
 
-OPENROUTER_MODEL = os.environ.get("VIDEORL_OPENROUTER_MODEL", "openai/gpt-4o")
+DEFAULT_OPENROUTER_MODELS = [
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "thinkingmachines/inkling:free",
+    "dots-studio/dots-3-note-preview:free",
+    "openai/gpt-4o-mini",
+]
+OPENROUTER_MODELS = [
+    m.strip() for m in os.environ.get("VIDEORL_OPENROUTER_MODEL", "").split(",") if m.strip()
+] or DEFAULT_OPENROUTER_MODELS
 GROQ_MODEL = os.environ.get("VIDEORL_GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
 
 
@@ -47,8 +55,9 @@ def routes() -> list[dict]:
         out.append({"base": DEFAULT_BASE_URL, "model": DEFAULT_MODEL, "key": API_KEY, "gap": 2.0})
     prov = _extra_providers()
     if prov.get("openrouter"):
-        out.append({"base": "https://openrouter.ai/api/v1", "model": OPENROUTER_MODEL,
-                    "key": prov["openrouter"], "gap": 2.0})
+        for m in OPENROUTER_MODELS:
+            out.append({"base": "https://openrouter.ai/api/v1", "model": m,
+                        "key": prov["openrouter"], "gap": 2.0})
     if prov.get("groq"):
         out.append({"base": "https://api.groq.com/openai/v1", "model": GROQ_MODEL,
                     "key": prov["groq"], "gap": 2.0})

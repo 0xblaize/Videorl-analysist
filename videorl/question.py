@@ -14,6 +14,8 @@ The verified reading to build on:
 - Strongest wrong reading: {rival}
 
 Question rules — all must hold:
+- EXACTLY one defensible answer. If two careful viewers could each defend a different reading, rewrite the question. Do not ask about the broad symbol (the whole broadcast, the whole object) — ask what ONE specific detail stands for: a particular image, a particular line of dialogue, a particular sound in the scene.
+- NO GIVEAWAYS. The question must never contain the meaning's own key words (if the answer is about propaganda or morale, those words cannot appear in the question) and must never hint at intent ("deceptive intent", "to sow panic", "to undermine"). A person reading the question cold must need the video to answer it.
 - Start from concrete things on screen, like this GOOD example: "After Willie sees the rusty ship covered in laundry, what does his fall into the water during the gear rescue say about him and the crew?"
 - BAD example (never write like this): "Throughout the film, how does the recurring presence of the Captain's desk function as a metaphor for the transformation of the protagonist?"
 - Plain words only. No filler: deep, rich, nuanced, explore, delve, journey, underscores, function as, serves to, acts as.
@@ -63,6 +65,7 @@ def draft(client: VLMClient, candidate: dict, duration: float, feedback: str = "
         q = str(data["question"]).strip()
         ev = [str(x).strip() for x in data.get("evidence_lines", [])]
         problems = rules.check_question(q) + rules.check_evidence_lines(ev, duration)
+        problems += rules.check_meaning_leak(q, str(candidate.get("meaning", "")))
         if not problems:
             return {"question": q, "evidence_lines": ev, "rationale": str(data.get("rationale", "")), "candidate_id": candidate.get("id")}
         log(f"  draft rejected: {problems}")

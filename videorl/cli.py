@@ -55,6 +55,18 @@ def cmd_question(args) -> int:
 
     client = VLMClient()
     feedback = ""
+    if getattr(args, "harder", False):
+        prev = read_json(adir / "question.json")
+        prev_q = str(prev.get("question", "")) if prev else ""
+        if prev:
+            write_json(adir / "question_v1.json", prev)
+        feedback = (
+            (f" The previous passing question was: '{prev_q}'. Do not repeat its phrasing or any of its key words." if prev_q else "")
+            + " Write a NEW question on the same verified reading that is about 5 times harder than a standard pass: "
+            "the answer must require connecting three or more separated moments, hinge on a subtler visual or audio detail, "
+            "and stay far from the most direct symbol reading. Still exactly one defensible answer, no giveaways."
+        )
+        log("harder mode: drafting a 5x harder question than the last one")
     rounds = 0
     while True:
         rounds += 1
@@ -168,7 +180,12 @@ def main(argv=None) -> int:
 
     r = sub.add_parser("run", help="one command: full analysis + question + check, one txt file out")
     r.add_argument("video", help="mp4 file or URL")
+    r.add_argument("--harder", action="store_true", help="draft a 5x harder question than the last passing one")
     r.set_defaults(func=cmd_run)
+
+    hh = sub.add_parser("harder", help="like run, but forces a new question ~5x harder than the last passing one")
+    hh.add_argument("video", help="mp4 file or URL")
+    hh.set_defaults(func=cmd_run, harder=True)
 
     q = sub.add_parser("question", help="stage 2: question package + difficulty check")
     q.add_argument("video", help="same video file as analyze")

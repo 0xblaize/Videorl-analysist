@@ -51,6 +51,28 @@ def check_question(q: str) -> list[str]:
     return problems
 
 
+_LEAK_STOP = {
+    "about", "which", "their", "there", "after", "before", "during", "while", "where",
+    "what", "when", "does", "into", "over", "more", "than", "then", "them", "they",
+    "from", "with", "have", "this", "that", "these", "those", "been", "were", "says",
+    "said", "show", "shown", "film", "scene", "movie", "video", "character", "characters",
+    "people", "represents", "represent", "broadcast", "broadcasts", "radio", "voice",
+    "voices", "sounds", "sound", "image", "images", "visual", "moment", "moments",
+}
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z']+", (text or "").lower())
+
+
+def check_meaning_leak(question: str, meaning: str) -> list[str]:
+    qw = set(_words(question))
+    hits = sorted({w for w in _words(meaning) if len(w) >= 5 and w not in _LEAK_STOP and w in qw})
+    if len(hits) >= 2:
+        return [f"question gives away the answer (uses the meaning's own words: {', '.join(hits[:4])})"]
+    return []
+
+
 RANGE_LINE = re.compile(r"^\s*(\d{1,2}:\d{2}(:\d{2})?)\s*-\s*(\d{1,2}:\d{2}(:\d{2})?)\s*\((\d+)\s*s")
 
 

@@ -128,9 +128,11 @@ Interrupted or failed halfway? Run the same command again — finished steps are
 **Other commands:**
 
 ```
-videorl analyze videoname.mp4     # stage 1 only (readings + report)
-videorl question videoname.mp4    # stage 2 only (question + check)
-videorl status                    # shows what is done for each video
+videorl harder video.mp4        # new question ~5x harder than the last passing one, full re-check
+videorl run video.mp4 --harder  # same thing as a flag
+videorl analyze videoname.mp4   # stage 1 only (readings + report)
+videorl question videoname.mp4  # stage 2 only (question + check)
+videorl status                  # shows what is done for each video
 ```
 
 **Useful settings:**

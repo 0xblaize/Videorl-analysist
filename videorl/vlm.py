@@ -123,6 +123,7 @@ class VLMClient:
     ) -> str:
         last_err = ""
         quota_fails = 0
+        token_clamped = False
         for attempt in range(config.MAX_RETRIES):
             route = self.routes[self.ri]
             mdl = model or route["model"]
@@ -170,6 +171,12 @@ class VLMClient:
             _log_call(tag, mdl, r.status_code, dt, note)
             last_err = f"HTTP {r.status_code}: {note[:300]}"
             low = note.lower()
+            if r.status_code == 402 and "max_tokens" in low:
+                if not token_clamped and body["max_tokens"] > 700:
+                    token_clamped = True
+                    body["max_tokens"] = max(700, int(body["max_tokens"] * 0.6))
+                    log(f"{tag}: balance is tight — retrying with fewer tokens")
+                    continue
             route_problem = (
                 r.status_code == 402
                 or (r.status_code == 404)

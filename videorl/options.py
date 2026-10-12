@@ -45,23 +45,25 @@ Pick the numbered candidate that matches the truth. If none matches, output {{"c
 {style}
 JSON only: {{"correct": <number or 0>}}"""
 
-DISTRACTOR_PROMPT = """Write near-miss distractors for a hard film question.
+DISTRACTOR_PROMPT = """Write near-miss distractors for a hard film question. The finished item has exactly 1 correct option and 7 distractors — 8 options in total. You write ONLY the 7 distractors; the correct option is shown only as the frame to match and is never part of your output.
 
 Question: {question}
-Correct answer: "{correct}"
+Correct answer (frame to match — do NOT copy or include it): "{correct}"
 Strongest wrong reading: "{rival}"
-Wrong blind answers to reuse as ideas: {wrong}
+Wrong blind answers from Step 5 (the model's own earlier beliefs — reuse their ideas in your own words): {wrong}
 
-Write 7-9 distractors. Rules:
-- Same start words as the correct answer. Same length, near enough.
+Rules for EVERY distractor:
+- It is a NEAR MISS: partly right, partly wrong. Keep the details that match the video and change at least one detail the question asks about. A distractor wrong from start to finish is useless.
+- This is symbolic interpretation: keep the reading the correct answer is built on and change ONE dimension of meaning — theme, character role, emotional implication, power relationship, motive, or consequence. Vary one thing at a time across the set; no two may change the same thing about the same subject.
+- NEVER too close: if someone watching beside you could not tell this apart from the correct answer, it is too close — cut it. You must be able to defend the distinction.
+- Same grammar frame, same length band, same verbs as the correct answer. The correct option must NOT be the longest or the most detailed. Answer exactly what the question asks and nothing more.
 - Plain words only. {style}
-- Each is half-right half-wrong. Change ONE small thing only — person, motive, feeling, power, result. Never fix a direction, order, or count.
-- The gets-right sentence MUST use words that appear IN the option itself.
-- The gets-wrong sentence says what the film really happens instead.
-- No two may change the same thing about the same subject.
+- Each option's gets-right sentence MUST use words that appear IN that option. The gets-wrong sentence says what the film really does instead.
+- Keep all reasoning in the gets-right / gets-wrong boxes — never inside the option text. Nobody reading the options should be able to tell which one is correct from how it is written.
+- Every box is unique: no two distractors may share the same gets-right sentence or the same gets-wrong sentence, in wording or in idea. Each one explains its OWN option only.
 
 Output STRICT JSON:
-{{"distractors": [{{"text": "<same frame as correct>", "right": "<gets-right, uses words from the option>", "wrong": "<gets-wrong + what really happens>"}}]}}
+{{"distractors": [{{"text": "<same frame and length band as correct>", "right": "<gets-right, uses words from the option>", "wrong": "<gets-wrong + what really happens in the film>"}}]}}
 JSON only."""
 
 
@@ -168,28 +170,57 @@ def _frame_of(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip()).rstrip(".")[:60]
 
 
-def write_distractors(client: VLMClient, question: str, correct: str, rival: str, wrong: list[str], n: int = 8) -> list[dict]:
+def write_distractors(client: VLMClient, question: str, correct: str, rival: str, wrong: list[str], n: int = 7) -> list[dict]:
     listing = "\n".join(f"- {w}" for w in wrong[:8]) or "(none)"
-    raw = client.chat(
-        DISTRACTOR_PROMPT.format(
-            question=question,
-            correct=correct,
-            rival=rival or "(none given)",
-            wrong=listing,
-            style=STYLE,
-        ),
-        max_tokens=2500,
-        temperature=0.6,
-        tag="distractors",
+    prompt = DISTRACTOR_PROMPT.format(
+        question=question,
+        correct=correct,
+        rival=rival or "(none given)",
+        wrong=listing,
+        style=STYLE,
     )
-    data = extract_json(raw)
-    dis = (data or {}).get("distractors", []) if isinstance(data, dict) else []
-    out = []
-    for d in dis if isinstance(dis, list) else []:
-        text = str(d.get("text", "")).strip()
-        if text and text.lower() != correct.lower().strip():
+    correct_words = len(correct.split())
+    for attempt in range(2):
+        raw = client.chat(
+            prompt,
+            max_tokens=2500,
+            temperature=0.6,
+            tag="distractors",
+        )
+        data = extract_json(raw)
+        dis = (data or {}).get("distractors", []) if isinstance(data, dict) else []
+        out = []
+        for d in dis if isinstance(dis, list) else []:
+            text = str(d.get("text", "")).strip()
+            if not text or text.lower() == correct.lower().strip():
+                continue
+            if difflib.SequenceMatcher(None, text.lower(), correct.lower()).ratio() > 0.85:
+                continue
+            if any(difflib.SequenceMatcher(None, text.lower(), e["text"].lower()).ratio() > 0.85 for e in out):
+                continue
+            rl = str(d.get("right", "")).lower()
+            wl = str(d.get("wrong", "")).lower()
+            if any(difflib.SequenceMatcher(None, rl, e["right"].lower()).ratio() > 0.85 for e in out if e.get("right")):
+                continue
+            if any(difflib.SequenceMatcher(None, wl, e["wrong"].lower()).ratio() > 0.85 for e in out if e.get("wrong")):
+                continue
             out.append({"text": text, "right": str(d.get("right", "")), "wrong": str(d.get("wrong", ""))})
-    return out[: max(n, 7)]
+        out = out[: max(n, 7)]
+        if len(out) < 7:
+            log(f"only {len(out)} usable distractors (need 7) — asking again")
+            continue
+        lengths = sorted(len(d["text"].split()) for d in out)
+        median = lengths[len(lengths) // 2]
+        if median and correct_words > median * 1.5:
+            log("correct option is too long compared to distractors — asking again with tighter band")
+            prompt = (
+                DISTRACTOR_PROMPT.format(question=question, correct=correct, rival=rival or "(none given)",
+                                         wrong=listing, style=STYLE)
+                + f"\n\nNOTE: the correct option has {correct_words} words — too long. Make every option tighter and equal in length; the correct one must not stand out."
+            )
+            continue
+        return out
+    return out
 
 
 def build_options(
