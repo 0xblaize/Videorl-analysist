@@ -99,7 +99,7 @@ echo "your-key-here" > ~/.videorl_key && chmod 600 ~/.videorl_key
 
 It also picks up a key automatically from `VIDEORL_API_KEY`, `GEMINI_API_KEY`, or your opencode `auth.json` — no setup needed if you already have one.
 
-**Default path:** Google Gemini `gemini-3.8-flash`, ~4.5s between calls. **Fallback** (no key file found): UnoRouter `gemini-3.1-flash-lite:free`, free tier at 1 message/minute — a full run takes 25–45 minutes and still prints live progress.
+**Default path:** Google Gemini `gemini-3.8-flash` — fires at full speed, no artificial waiting. If a server ever answers 429 it slows down for that moment only, then speeds back up automatically. **Fallback** (no key file found): UnoRouter `gemini-3.1-flash-lite:free`, free tier at 1 message/minute — a full run takes 25–45 minutes and still prints live progress.
 
 Change model any time:
 
@@ -144,7 +144,7 @@ videorl status                    # shows what is done for each video
 | VIDEORL_API_KEY | from ~/.videorl_key | API key |
 | VIDEORL_MODEL | gemini-3.8-flash | vision model |
 | VIDEORL_BASE_URL | https://generativelanguage.googleapis.com/v1beta/openai | API address |
-| VIDEORL_RATE_LIMIT | 4.5 | seconds between model calls |
+| VIDEORL_RATE_LIMIT | 1 (adaptive) | base seconds between calls; only grows if the server says 429 |
 | VIDEORL_WHISPER | tiny | transcript size (tiny/fast … small/base/better) |
 | VIDEORL_TIMEOUT | 240 | seconds before a model call is retried |
 

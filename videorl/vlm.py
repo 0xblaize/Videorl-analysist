@@ -1,6 +1,7 @@
 import base64
 import json
 import re
+import threading
 import time
 from pathlib import Path
 
@@ -14,18 +15,41 @@ STATE_DIR.mkdir(parents=True, exist_ok=True)
 LAST_CALL_FILE = STATE_DIR / "last_call_ts"
 CALL_LOG = STATE_DIR / "calls.jsonl"
 
+_lock = threading.Lock()
+_gap = max(1.0, config.RATE_LIMIT_SECONDS)
+_floor = _gap
+_next_at = 0.0
+_ok_streak = 0
+
 
 def _respect_rate_limit() -> None:
-    last = 0.0
-    if LAST_CALL_FILE.exists():
-        try:
-            last = float(LAST_CALL_FILE.read_text().strip())
-        except Exception:
-            last = 0.0
-    wait = config.RATE_LIMIT_SECONDS - (time.time() - last)
-    if wait > 0:
-        log(f"rate limit: waiting {wait:.0f}s")
-        time.sleep(wait)
+    global _next_at
+    with _lock:
+        now = time.time()
+        wait = _next_at - now
+        if wait > 0:
+            if wait >= 4:
+                log(f"server asked us to slow down: waiting {wait:.0f}s")
+            time.sleep(wait)
+        _next_at = time.time() + _gap
+
+
+def _on_success() -> None:
+    global _gap, _ok_streak
+    with _lock:
+        _ok_streak += 1
+        if _ok_streak >= 12 and _gap > _floor:
+            _gap = max(_floor, _gap * 0.75)
+            _ok_streak = 0
+
+
+def _on_throttle(hint_seconds: int | None = None) -> None:
+    global _gap, _ok_streak
+    with _lock:
+        target = hint_seconds if hint_seconds else 5
+        _gap = min(30.0, max(5.0, _gap * 3, float(target)))
+        _ok_streak = 0
+        log(f"server throttled us — slowing to {_gap:.0f}s between calls (auto-recovers)")
 
 
 def _mark_call() -> None:
@@ -116,15 +140,20 @@ class VLMClient:
                 except Exception:
                     text = r.text
                 _log_call(tag, model, 200, dt)
+                _on_success()
                 return text
             note = r.text[:400]
             _log_call(tag, model, r.status_code, dt, note)
             wait = None
             m = re.search(r"retry in (\d+)", note, re.I)
             if m:
-                wait = int(m.group(1)) + 3
-            elif r.status_code in (429, 503):
-                wait = min(90, 20 * (attempt + 1))
+                wait = int(m.group(1)) + 2
+            elif r.status_code == 429:
+                wait = 10
+            elif r.status_code == 503:
+                wait = min(30, 8 * (attempt + 1))
+            if r.status_code == 429:
+                _on_throttle(int(m.group(1)) if m else None)
             last_err = f"HTTP {r.status_code}: {note}"
             if wait is None:
                 break
@@ -134,7 +163,6 @@ class VLMClient:
 
     def chat_many(self, prompts: list[dict], workers: int = 3) -> list:
         from concurrent.futures import ThreadPoolExecutor
-        import time as _t
 
         results = [None] * len(prompts)
 
@@ -145,11 +173,7 @@ class VLMClient:
                 results[i] = e
 
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = []
-            for i, kw in enumerate(prompts):
-                futs.append(ex.submit(one, i, kw))
-                if i < len(prompts) - 1:
-                    _t.sleep(max(1.5, config.RATE_LIMIT_SECONDS / 3))
+            futs = [ex.submit(one, i, kw) for i, kw in enumerate(prompts)]
             for f in futs:
                 f.result()
         return results

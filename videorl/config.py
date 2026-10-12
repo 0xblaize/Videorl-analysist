@@ -76,7 +76,7 @@ def _pick_model() -> str:
 def _pick_rate() -> float:
     if _RATE_ENV:
         return float(_RATE_ENV)
-    return 4.5 if _USING_GOOGLE else 63.0
+    return 1.0 if _USING_GOOGLE else 63.0
 
 
 DEFAULT_BASE_URL = _pick_base()
