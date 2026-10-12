@@ -1,6 +1,6 @@
 # videorl — VideoRL v7 Symbolic Analyst
 
-**Builder: blaize**
+**By [blaize (@0xblaize)](https://github.com/0xblaize)**
 
 One command watches a video, finds what it symbolizes, and writes a finished Step 1–10 question package into a single `.txt` file. Built for the Project Videorl v7 task, category: Symbolic / Metaphorical Interpretation.
 
