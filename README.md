@@ -89,28 +89,20 @@ videorl run videoname.mp4
 
 ---
 
-## API key (one time)
+## API keys (one time)
 
-The tool needs a vision model. Put your Gemini key in a file:
-
-```bash
-echo "your-key-here" > ~/.videorl_key && chmod 600 ~/.videorl_key
-```
-
-It also picks up a key automatically from `VIDEORL_API_KEY`, `GEMINI_API_KEY`, or your opencode `auth.json` — no setup needed if you already have one.
-
-**Default path:** Google Gemini `gemini-3.5-flash` (the free flash-3.8 tier allows only 20 requests/day — not enough for one run). Server hiccups are retried quietly in the background; if a daily quota ever runs out mid-run, the tool switches by itself to the UnoRouter free backup and keeps going. **Fallback** (no key file found): UnoRouter `gemini-3.1-flash-lite:free`, free tier at 1 message/minute — a full run takes 25–45 minutes and still prints live progress.
-
-Change model any time:
+The tool needs a vision model. Put your keys in one file:
 
 ```bash
-export VIDEORL_MODEL="your-model-name"
-export VIDEORL_BASE_URL="https://your-api/v1"
+cat > ~/.videorl_providers.json <<'EOF'
+{"openrouter": "sk-or-...", "groq": "gsk_..."}
+EOF
+chmod 600 ~/.videorl_providers.json
 ```
 
-**Multiple keys (recommended for free tier):** every free Google AI Studio key has its own daily quota. Put several in `~/.videorl_keys` (one per line) and the tool rotates to the next key automatically when one runs dry — free speed adds up.
+Either key alone is enough. It uses OpenRouter's main vision model first, then Groq's, and jumps between them on its own when one is out of quota, has no credit, or rejects a model — you never see those errors, only one short line when it switches.
 
-**OpenRouter / Groq:** put your keys in `~/.videorl_providers.json` as `{"openrouter": "sk-or-...", "groq": "gsk_..."}`. The tool uses their main vision models and jumps between every configured provider on its own when one is out of quota, has no credit, or rejects a model — you never see the errors, only one short line when it switches.
+Change models any time via env: `VIDEORL_OPENROUTER_MODEL`, `VIDEORL_GROQ_MODEL`, or point at any OpenAI-compatible API with `VIDEORL_BASE_URL` + `VIDEORL_MODEL` + `VIDEORL_API_KEY`.
 
 ---
 
@@ -146,8 +138,8 @@ videorl status                    # shows what is done for each video
 | Env var | Default | Meaning |
 |---|---|---|
 | VIDEORL_API_KEY | from ~/.videorl_key | API key |
-| VIDEORL_MODEL | gemini-3.5-flash | vision model |
-| VIDEORL_BASE_URL | https://generativelanguage.googleapis.com/v1beta/openai | API address |
+| VIDEORL_MODEL | (from providers file) | vision model |
+| VIDEORL_BASE_URL | — | any OpenAI-compatible API address |
 | VIDEORL_RATE_LIMIT | 1 (adaptive) | base seconds between calls; only grows if the server says 429 |
 | VIDEORL_WHISPER | tiny | transcript size (tiny/fast … small/base/better) |
 | VIDEORL_TIMEOUT | 240 | seconds before a model call is retried |
