@@ -17,7 +17,7 @@ videorl run videoname.mp4
 3. Builds 3–5 symbolic readings, each checked against its own footage
 4. Writes one hard question + proof times (no time codes, no position words)
 5. Gets 8 blind answers, merges them, picks the correct option, writes 7+ near-miss distractors
-6. Runs the 8-run difficulty check (needs correct picked ≤2 of 8)
+6. Runs the 8-run difficulty check (needs correct picked ≤2 of 8). If the question is too easy, it automatically writes a harder one and re-checks (up to 3 rounds)
 7. Saves everything into one file
 
 **Output:**
@@ -99,7 +99,7 @@ echo "your-key-here" > ~/.videorl_key && chmod 600 ~/.videorl_key
 
 It also picks up a key automatically from `VIDEORL_API_KEY`, `GEMINI_API_KEY`, or your opencode `auth.json` — no setup needed if you already have one.
 
-**Default path:** Google Gemini `gemini-3.8-flash` — fires at full speed, no artificial waiting. If a server ever answers 429 it slows down for that moment only, then speeds back up automatically. **Fallback** (no key file found): UnoRouter `gemini-3.1-flash-lite:free`, free tier at 1 message/minute — a full run takes 25–45 minutes and still prints live progress.
+**Default path:** Google Gemini `gemini-3.5-flash` (the free flash-3.8 tier allows only 20 requests/day — not enough for one run). Server hiccups are retried quietly in the background; if a daily quota ever runs out mid-run, the tool switches by itself to the UnoRouter free backup and keeps going. **Fallback** (no key file found): UnoRouter `gemini-3.1-flash-lite:free`, free tier at 1 message/minute — a full run takes 25–45 minutes and still prints live progress.
 
 Change model any time:
 
@@ -107,6 +107,10 @@ Change model any time:
 export VIDEORL_MODEL="your-model-name"
 export VIDEORL_BASE_URL="https://your-api/v1"
 ```
+
+**Multiple keys (recommended for free tier):** every free Google AI Studio key has its own daily quota. Put several in `~/.videorl_keys` (one per line) and the tool rotates to the next key automatically when one runs dry — free speed adds up.
+
+**OpenRouter / Groq:** put your keys in `~/.videorl_providers.json` as `{"openrouter": "sk-or-...", "groq": "gsk_..."}`. The tool uses their main vision models and jumps between every configured provider on its own when one is out of quota, has no credit, or rejects a model — you never see the errors, only one short line when it switches.
 
 ---
 
@@ -142,7 +146,7 @@ videorl status                    # shows what is done for each video
 | Env var | Default | Meaning |
 |---|---|---|
 | VIDEORL_API_KEY | from ~/.videorl_key | API key |
-| VIDEORL_MODEL | gemini-3.8-flash | vision model |
+| VIDEORL_MODEL | gemini-3.5-flash | vision model |
 | VIDEORL_BASE_URL | https://generativelanguage.googleapis.com/v1beta/openai | API address |
 | VIDEORL_RATE_LIMIT | 1 (adaptive) | base seconds between calls; only grows if the server says 429 |
 | VIDEORL_WHISPER | tiny | transcript size (tiny/fast … small/base/better) |

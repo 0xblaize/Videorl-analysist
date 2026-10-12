@@ -7,6 +7,8 @@ auth.json
 secrets.*
 config.local.json
 .videorl_key
+.videorl_keys
+.videorl_providers.json
 
 # videos and big media — never push
 *.mp4

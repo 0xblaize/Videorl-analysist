@@ -29,8 +29,6 @@ def _respect_rate_limit() -> None:
         now = time.time()
         wait = _next_at - now
         if wait > 0:
-            if wait >= 4:
-                log(f"server asked us to slow down: waiting {wait:.0f}s")
             time.sleep(wait)
         _next_at = time.time() + _gap
 
@@ -47,12 +45,16 @@ def _on_success() -> None:
 def _on_throttle(hint_seconds: int | None = None) -> None:
     global _gap, _ok_streak, _last_throttle
     with _lock:
+        if hint_seconds is not None and hint_seconds <= 90:
+            _gap = max(_gap, min(70.0, float(hint_seconds) + 8.0))
+            _ok_streak = 0
+            return
         now = time.time()
         if now - _last_throttle < 60:
             return
         _last_throttle = now
         target = float(hint_seconds) if hint_seconds else 5.0
-        _gap = min(30.0, max(_gap * 2 if _gap > _floor else 5.0, target))
+        _gap = min(120.0, max(_gap * 1.5, 5.0, target))
         _ok_streak = 0
         log(f"server throttled us — slowing to {_gap:.0f}s between calls (auto-recovers)")
 
@@ -87,12 +89,26 @@ def video_part(path: Path) -> dict:
 
 class VLMClient:
     def __init__(self, model: str | None = None, base_url: str | None = None, api_key: str | None = None):
-        self.model = model or config.DEFAULT_MODEL
-        self.base_url = (base_url or config.DEFAULT_BASE_URL).rstrip("/")
-        self.api_key = api_key or config.API_KEY
+        self.routes = list(config.routes())
+        if base_url and api_key:
+            self.routes.insert(0, {"base": base_url.rstrip("/"), "model": model or config.DEFAULT_MODEL,
+                                   "key": api_key, "gap": 1.0})
+        self.ri = 0
+
+    @property
+    def model(self) -> str:
+        return self.routes[self.ri]["model"]
+
+    @property
+    def base_url(self) -> str:
+        return self.routes[self.ri]["base"]
+
+    @property
+    def api_key(self) -> str:
+        return self.routes[self.ri]["key"]
 
     def available(self) -> bool:
-        return bool(self.api_key)
+        return any(r["key"] for r in self.routes)
 
     def chat(
         self,
@@ -105,27 +121,29 @@ class VLMClient:
         tag: str = "chat",
         model: str | None = None,
     ) -> str:
-        model = model or self.model
-        content: list[dict] = [{"type": "text", "text": prompt}]
-        for img in images or []:
-            content.append(image_part(Path(img)))
-        if video is not None:
-            content.append(video_part(Path(video)))
-        body = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": [{"role": "user", "content": content}],
-        }
-        if json_mode:
-            body["response_format"] = {"type": "json_object"}
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
-        url = f"{self.base_url}/chat/completions"
         last_err = ""
+        quota_fails = 0
         for attempt in range(config.MAX_RETRIES):
+            route = self.routes[self.ri]
+            mdl = model or route["model"]
+            content: list[dict] = [{"type": "text", "text": prompt}]
+            for img in images or []:
+                content.append(image_part(Path(img)))
+            if video is not None:
+                content.append(video_part(Path(video)))
+            body = {
+                "model": mdl,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [{"role": "user", "content": content}],
+            }
+            if json_mode:
+                body["response_format"] = {"type": "json_object"}
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {route['key']}",
+            }
+            url = f"{route['base'].rstrip('/')}/chat/completions"
             _respect_rate_limit()
             t0 = time.time()
             try:
@@ -133,8 +151,8 @@ class VLMClient:
             except Exception as e:
                 _mark_call()
                 last_err = f"network: {e}"
-                log(f"{tag}: network error, retry {attempt + 1}: {e}")
-                time.sleep(min(30, 5 * (attempt + 1)))
+                log(f"{tag}: connection problem, retrying quietly ({attempt + 1})")
+                time.sleep(min(20, 5 * (attempt + 1)))
                 continue
             dt = time.time() - t0
             _mark_call()
@@ -144,27 +162,52 @@ class VLMClient:
                     text = j["choices"][0]["message"]["content"] or ""
                 except Exception:
                     text = r.text
-                _log_call(tag, model, 200, dt)
+                _log_call(tag, mdl, 200, dt)
                 _on_success()
+                quota_fails = 0
                 return text
-            note = r.text[:400]
-            _log_call(tag, model, r.status_code, dt, note)
+            note = r.text[:1200]
+            _log_call(tag, mdl, r.status_code, dt, note)
+            last_err = f"HTTP {r.status_code}: {note[:300]}"
+            low = note.lower()
+            route_problem = (
+                r.status_code == 402
+                or (r.status_code == 404)
+                or (r.status_code == 400 and "model" in low)
+                or (r.status_code == 429 and ("exceeded your current quota" in low or "per day" in low))
+            )
+            if route_problem:
+                dry_all_day = bool(re.search(r"retry in \d+h", note, re.I)) or r.status_code in (402, 404) or "per day" in low
+                quota_fails += 1
+                if not dry_all_day and quota_fails <= 2:
+                    mshort = re.search(r"retry in (\d+)m", note, re.I)
+                    wait = min(75, int(mshort.group(1)) * 60 + 5) if mshort else 40
+                    log(f"{tag}: busy minute window — pausing {wait}s, then retrying")
+                    time.sleep(wait)
+                    continue
+                if self.ri + 1 < len(self.routes):
+                    self.ri += 1
+                    nxt = self.routes[self.ri]
+                    global _gap, _floor
+                    _gap = _floor = max(1.0, nxt.get("gap", 1.0))
+                    log(f"{mdl}: not usable right now — switching to {nxt['model']}")
+                    continue
+                raise RuntimeError(
+                    "every API route is out of quota or misconfigured. "
+                    "Add keys to ~/.videorl_providers.json (openrouter, groq) or ~/.videorl_key."
+                )
             wait = None
             m = re.search(r"retry in (\d+)", note, re.I)
-            if m:
-                wait = int(m.group(1)) + 2
-            elif r.status_code == 429:
-                wait = 10
+            if r.status_code == 429:
+                wait = int(m.group(1)) + 2 if m else 10
+                _on_throttle(int(m.group(1)) if m else None)
             elif r.status_code == 503:
                 wait = min(30, 8 * (attempt + 1))
-            if r.status_code == 429:
-                _on_throttle(int(m.group(1)) if m else None)
-            last_err = f"HTTP {r.status_code}: {note}"
+                log(f"{tag}: server busy, retrying quietly ({attempt + 1})")
             if wait is None:
                 break
-            log(f"{tag}: HTTP {r.status_code}, backing off {wait}s (attempt {attempt + 1})")
             time.sleep(wait)
-        raise RuntimeError(f"VLM call failed [{tag}]: {last_err}")
+        raise RuntimeError(f"gave up on [{tag}]: {last_err[:200]}")
 
     def chat_many(self, prompts: list[dict], workers: int = 3) -> list:
         from concurrent.futures import ThreadPoolExecutor

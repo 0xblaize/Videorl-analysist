@@ -149,4 +149,8 @@ def run(client, video: Path, workdir: Path, outline: str, segments: list, motifs
         c["verification"] = verify_candidate(client, video, c, workdir, duration)
         v = c["verification"]
         log(f"  candidate {c.get('id')}: supported={v.get('supported')}")
+        if v.get("supported"):
+            for rest in cands[cands.index(c) + 1:]:
+                rest["verification"] = {"supported": None, "note": "not needed - an earlier reading already passed"}
+            break
     return cands

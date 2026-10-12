@@ -12,7 +12,7 @@ Question: {question}
 Options:
 {options}
 
-Think briefly, then output STRICT JSON: {{"pick": <option number>}}. JSON only."""
+Reply with ONLY the JSON object, nothing else, in this exact shape: {{"pick": <option number>}}"""
 
 
 def run_difficulty(
@@ -45,25 +45,35 @@ def run_difficulty(
                 f"{pos}. {options[num - 1]['text']}" for pos, num in enumerate(s["order"], 1)
             )),
             images=[sheet] if sheet else None,
-            max_tokens=150,
+            max_tokens=350,
             temperature=0.7,
             tag=f"difficulty-{i + 1}",
         )
         for i, s in enumerate(setups)
     ]
-    results = client.chat_many(calls, workers=1)
     out = []
     correct_picks = 0
-    for i, (raw, s) in enumerate(zip(results, setups), 1):
-        if isinstance(raw, Exception) or not raw:
-            log(f"  run {i} failed: {raw}")
+    for i, (kw, s) in enumerate(zip(calls, setups), 1):
+        try:
+            raw = client.chat(**kw)
+        except Exception as e:
+            log(f"  run {i} failed: {e}")
             continue
         data = extract_json(str(raw))
-        try:
-            pick = int((data or {}).get("pick", 0))
-        except Exception:
-            m = re.search(r"\d+", str(raw))
-            pick = int(m.group()) if m else 0
+        pick = 0
+        if isinstance(data, dict):
+            for k in ("pick", "answer", "option", "choice", "number", "best", "index"):
+                v = data.get(k)
+                if v is not None:
+                    m = re.search(r"\d+", str(v))
+                    if m:
+                        pick = int(m.group())
+                        break
+        if not pick:
+            m = re.search(r'"(?:pick|answer|option|choice)"\s*:\s*(\d+)', str(raw), re.I)
+            if not m:
+                m = re.search(r"\b([1-9])\b", str(raw))
+            pick = int(m.group(1) if m.lastindex else m.group()) if m else 0
         picked_num = s["order"][pick - 1] if 1 <= pick <= len(s["order"]) else 0
         hit = picked_num == correct_number
         correct_picks += 1 if hit else 0

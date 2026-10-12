@@ -108,11 +108,12 @@ def blind_answers(client: VLMClient, video: Path, question: str, evidence_lines:
         )
         for i in range(n)
     ]
-    results = client.chat_many(calls, workers=1)
     answers = []
-    for i, raw in enumerate(results):
-        if isinstance(raw, Exception) or not raw:
-            log(f"  blind run {i + 1} failed: {raw}")
+    for i, kw in enumerate(calls):
+        try:
+            raw = client.chat(**kw)
+        except Exception as e:
+            log(f"  blind run {i + 1} failed: {e}")
             continue
         text = " ".join(str(raw).strip().split())
         answers.append({"run": i + 1, "answer": text})

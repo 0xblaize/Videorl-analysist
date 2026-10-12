@@ -8,7 +8,7 @@ OPencode_CFG = HOME / ".config" / "opencode" / "opencode.json"
 KEY_FILE = HOME / ".videorl_key"
 
 GOOGLE_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
-GOOGLE_MODEL = "gemini-3.8-flash"
+GOOGLE_MODEL = "gemini-3.5-flash"  # 3.8-flash free tier is only 20 req/day — cannot finish one run
 
 DEFAULT_BASE_URL = os.environ.get("VIDEORL_BASE_URL", "")
 DEFAULT_MODEL = os.environ.get("VIDEORL_MODEL", "")
@@ -83,3 +83,56 @@ DEFAULT_BASE_URL = _pick_base()
 DEFAULT_MODEL = _pick_model()
 ANSWERER_MODEL = ANSWERER_MODEL or DEFAULT_MODEL
 RATE_LIMIT_SECONDS = _pick_rate()
+
+
+def _unorouter_key() -> str:
+    if AUTH_JSON.exists():
+        try:
+            auth = json.loads(AUTH_JSON.read_text())
+        except Exception:
+            return ""
+        for name in ("unorouter", "unorouter-live"):
+            e = auth.get(name)
+            if isinstance(e, dict) and e.get("key"):
+                return e["key"]
+    return ""
+
+
+PROVIDERS_FILE = HOME / ".videorl_providers.json"
+
+OPENROUTER_MODEL = os.environ.get("VIDEORL_OPENROUTER_MODEL", "google/gemini-2.5-flash")
+GROQ_MODEL = os.environ.get("VIDEORL_GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
+
+
+def _extra_providers() -> dict:
+    if PROVIDERS_FILE.exists():
+        try:
+            data = json.loads(PROVIDERS_FILE.read_text())
+            return {k: v for k, v in data.items() if isinstance(v, str) and v.strip()}
+        except Exception:
+            return {}
+    return {}
+
+
+def routes() -> list[dict]:
+    keys = [API_KEY] if API_KEY else []
+    extra = HOME / ".videorl_keys"
+    if extra.exists():
+        for line in extra.read_text().splitlines():
+            k = line.strip()
+            if k and k not in keys:
+                keys.append(k)
+    out = [{"base": DEFAULT_BASE_URL, "model": DEFAULT_MODEL, "key": k,
+            "gap": 1.0 if _USING_GOOGLE else 63.0} for k in keys]
+    prov = _extra_providers()
+    if prov.get("openrouter"):
+        out.append({"base": "https://openrouter.ai/api/v1", "model": OPENROUTER_MODEL,
+                    "key": prov["openrouter"], "gap": 2.0})
+    if prov.get("groq"):
+        out.append({"base": "https://api.groq.com/openai/v1", "model": GROQ_MODEL,
+                    "key": prov["groq"], "gap": 2.0})
+    uk = _unorouter_key()
+    if uk and "unorouter.com" not in DEFAULT_BASE_URL:
+        out.append({"base": "https://api.unorouter.com/v1", "model": "gemini-3.1-flash-lite:free",
+                    "key": uk, "gap": 63.0})
+    return out or [{"base": DEFAULT_BASE_URL, "model": DEFAULT_MODEL, "key": API_KEY, "gap": 63.0}]

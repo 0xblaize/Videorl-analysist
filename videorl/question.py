@@ -35,7 +35,7 @@ Output STRICT JSON:
 JSON only."""
 
 
-def draft(client: VLMClient, candidate: dict, duration: float) -> dict:
+def draft(client: VLMClient, candidate: dict, duration: float, feedback: str = "") -> dict:
     ranges = "; ".join(
         f"{ts(float(r['start']))}-{ts(float(r['end']))} ({float(r['end']) - float(r['start']):.0f}s): {r.get('what_shows', '')}"
         for r in candidate.get("evidence_ranges", [])
@@ -47,6 +47,8 @@ def draft(client: VLMClient, candidate: dict, duration: float) -> dict:
         ranges=ranges or "(use the times above)",
         rival=candidate.get("rival_reading"),
     )
+    if feedback:
+        prompt += f"\n\nIMPORTANT — make this one HARDER:{feedback}"
     for attempt in range(3):
         log(f"drafting question (attempt {attempt + 1})...")
         try:
