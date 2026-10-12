@@ -1,0 +1,48 @@
+# secrets — never push
+auth.json
+.env
+.env.*
+*.key
+*api*key*
+secrets.*
+config.local.json
+
+# videos and big media — never push
+*.mp4
+*.MP4
+*.mkv
+*.mov
+*.webm
+*.avi
+*.wav
+*.mp3
+*.m4a
+*.srt
+
+# generated work and results — never push
+videorl_work/
+*_analysis/
+*_Response.txt
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+*.egg
+
+# models / caches
+models/
+*.bin
+*.ggml*
+.cache/
+
+# logs and OS junk
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini

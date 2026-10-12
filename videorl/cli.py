@@ -1,0 +1,179 @@
+import argparse
+import sys
+from pathlib import Path
+
+from videorl import rules
+from videorl.util import analysis_dir_for, die, log, read_json, response_path_for, write_json
+
+
+def cmd_analyze(args) -> int:
+    from videorl.stage1 import run_stage1
+
+    res = run_stage1(args.video, workdir=Path.cwd())
+    print()
+    print(res["report"])
+    print(f"\nArtifacts: {res['adir']}")
+    cands = res["candidates"]
+    if not cands:
+        print("No symbolic candidates survived validation — inspect captions.json / motifs.json.")
+        return 2
+    print("\nNext: videorl question <video> --candidate <N>")
+    return 0
+
+
+def cmd_question(args) -> int:
+    from videorl.difficulty import run_difficulty
+    from videorl.options import build_options
+    from videorl.question import draft
+    from videorl.report import build_stage2_package
+    from videorl.vlm import VLMClient
+
+    meta = None
+    video = None
+    for cand_path in _find_analysis(args.video):
+        adir = cand_path.parent
+        meta = read_json(adir / "meta.json")
+        if meta:
+            video = Path(meta["video_path"])
+            break
+    if not meta:
+        die("no stage-1 artifacts found; run `videorl analyze` first")
+    adir = analysis_dir_for(video)
+    candidates = read_json(adir / "symbolic_candidates.json") or []
+    if not candidates:
+        die("no symbolic readings in stage 1")
+    if args.candidate is None:
+        def score(c):
+            v = c.get("verification") or {}
+            return (1 if v.get("supported") else 0, float(c.get("confidence") or 0))
+        candidate = sorted(candidates, key=score, reverse=True)[0]
+        log(f"using verified reading: {candidate.get('symbol')} — {candidate.get('meaning')}")
+    else:
+        candidate = next((c for c in candidates if str(c.get("id")) == str(args.candidate)), None)
+        if not candidate:
+            die(f"reading {args.candidate} not found")
+
+    client = VLMClient()
+    question_pack = read_json(adir / "question.json")
+    if question_pack is None or question_pack.get("candidate_id") != candidate.get("id"):
+        question_pack = draft(client, candidate, meta["duration_s"])
+        write_json(adir / "question.json", question_pack)
+    log(f"question: {question_pack['question']}")
+
+    options_pack = read_json(adir / "options.json")
+    if options_pack is None:
+        options_pack = build_options(
+            client, video, question_pack["question"], question_pack["evidence_lines"], candidate, adir, n_blind=args.runs
+        )
+        write_json(adir / "options.json", options_pack)
+    problems = rules.check_all(
+        question_pack["question"],
+        question_pack["evidence_lines"],
+        [o["text"] for o in options_pack["options"]],
+        options_pack["correct_number"] - 1,
+        meta["duration_s"],
+    )
+    if problems:
+        log(f"rule check warnings: {problems}")
+
+    difficulty_pack = read_json(adir / "difficulty.json")
+    if difficulty_pack is None or args.rerun_difficulty:
+        difficulty_pack = run_difficulty(
+            client,
+            video,
+            question_pack["question"],
+            options_pack["options"],
+            options_pack["correct_number"],
+            question_pack["evidence_lines"],
+            adir,
+            runs=args.difficulty_runs,
+        )
+        write_json(adir / "difficulty.json", difficulty_pack)
+
+    package = build_stage2_package(meta, candidate, question_pack, options_pack, difficulty_pack)
+    out_file = response_path_for(video)
+    out_file.write_text(package, encoding="utf-8")
+    print()
+    print(f"Everything saved in {out_file}")
+    return 0 if difficulty_pack.get("pass") else 3
+
+
+def cmd_run(args) -> int:
+    from videorl.stage1 import run_stage1
+
+    run_stage1(args.video)
+    args.candidate = None
+    args.runs = 8
+    args.difficulty_runs = 8
+    args.rerun_difficulty = False
+    return cmd_question(args)
+
+
+def _find_analysis(video_arg: str):
+    p = Path(video_arg).expanduser()
+    if p.exists():
+        adir = analysis_dir_for(p.resolve())
+        if (adir / "meta.json").exists():
+            yield adir / "meta.json"
+    cache_root = Path.home() / "Downloads" / "videorl_work"
+    if cache_root.exists():
+        for d in sorted(cache_root.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if (d / "meta.json").exists():
+                yield d / "meta.json"
+
+
+def cmd_status(args) -> int:
+    found = False
+    for meta_path in _find_analysis(args.video or "."):
+        adir = meta_path.parent
+        meta = read_json(meta_path) or {}
+        found = True
+        print(f"== {adir.name}")
+        for f in [
+            "meta.json", "scenes.json", "keyframes", "contact_sheets", "audio.wav", "transcript.srt",
+            "captions.json", "motifs.json", "symbolic_candidates.json", "question.json", "options.json",
+            "difficulty.json", "stage1_report.md", "stage2_package.md",
+        ]:
+            p = adir / f
+            print(f"  {'✓' if p.exists() else '·'} {f}")
+        if meta:
+            print(f"  duration={meta.get('duration_s')}s usable={meta.get('usable')}")
+    if not found:
+        print("No analysis folders found next to cwd or the given path.")
+    return 0
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="videorl", description="VideoRL v7 symbolic video question pipeline")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    a = sub.add_parser("analyze", help="stage 1: deep analysis + symbolic readings")
+    a.add_argument("video", help="mp4 file or URL (run from the folder holding the file)")
+    a.set_defaults(func=cmd_analyze)
+
+    r = sub.add_parser("run", help="one command: full analysis + question + check, one txt file out")
+    r.add_argument("video", help="mp4 file or URL")
+    r.set_defaults(func=cmd_run)
+
+    q = sub.add_parser("question", help="stage 2: question package + difficulty check")
+    q.add_argument("video", help="same video file as analyze")
+    q.add_argument("--candidate", type=str, default=None, help="candidate id from stage1_report.md")
+    q.add_argument("--runs", type=int, default=8, help="blind answer runs (default 8)")
+    q.add_argument("--difficulty-runs", type=int, default=8, help="difficulty check runs (default 8)")
+    q.add_argument("--rerun-difficulty", action="store_true")
+    q.set_defaults(func=cmd_question)
+
+    s = sub.add_parser("status", help="show artifacts for analysis folders")
+    s.add_argument("video", nargs="?", default=".")
+    s.set_defaults(func=cmd_status)
+
+    args = ap.parse_args(argv)
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        print("\ninterrupted — artifacts so far are kept; re-run the same command to resume")
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

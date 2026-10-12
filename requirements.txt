@@ -1,0 +1,9 @@
+scenedetect-headless>=0.7.2
+faster-whisper>=1.1
+av>=13
+imageio-ffmpeg>=0.4
+opencv-python>=4.9
+pillow>=10
+numpy>=1.26
+httpx>=0.27
+tqdm>=4.66

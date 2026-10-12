@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "videorl"
+version = "0.1.0"
+description = "VideoRL v7 symbolic/metaphorical video question authoring pipeline"
+requires-python = ">=3.11"
+dependencies = [
+  "scenedetect-headless>=0.7.2",
+  "faster-whisper>=1.1",
+  "av>=13",
+  "imageio-ffmpeg>=0.4",
+  "opencv-python>=4.9",
+  "pillow>=10",
+  "numpy>=1.26",
+  "httpx>=0.27",
+  "tqdm>=4.66",
+]
+
+[project.scripts]
+videorl = "videorl.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["videorl*"]
