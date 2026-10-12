@@ -100,7 +100,7 @@ def _unorouter_key() -> str:
 
 PROVIDERS_FILE = HOME / ".videorl_providers.json"
 
-OPENROUTER_MODEL = os.environ.get("VIDEORL_OPENROUTER_MODEL", "google/gemini-2.5-flash")
+OPENROUTER_MODEL = os.environ.get("VIDEORL_OPENROUTER_MODEL", "openai/gpt-4o")
 GROQ_MODEL = os.environ.get("VIDEORL_GROQ_MODEL", "meta-llama/llama-4-maverick-17b-128e-instruct")
 
 
@@ -115,15 +115,9 @@ def _extra_providers() -> dict:
 
 
 def routes() -> list[dict]:
-    keys = [API_KEY] if API_KEY else []
-    extra = HOME / ".videorl_keys"
-    if extra.exists():
-        for line in extra.read_text().splitlines():
-            k = line.strip()
-            if k and k not in keys:
-                keys.append(k)
-    out = [{"base": DEFAULT_BASE_URL, "model": DEFAULT_MODEL, "key": k,
-            "gap": 1.0 if _USING_GOOGLE else 63.0} for k in keys]
+    out = []
+    if DEFAULT_BASE_URL and DEFAULT_MODEL and not _USING_GOOGLE:
+        out.append({"base": DEFAULT_BASE_URL, "model": DEFAULT_MODEL, "key": API_KEY, "gap": 2.0})
     prov = _extra_providers()
     if prov.get("openrouter"):
         out.append({"base": "https://openrouter.ai/api/v1", "model": OPENROUTER_MODEL,
@@ -131,8 +125,4 @@ def routes() -> list[dict]:
     if prov.get("groq"):
         out.append({"base": "https://api.groq.com/openai/v1", "model": GROQ_MODEL,
                     "key": prov["groq"], "gap": 2.0})
-    uk = _unorouter_key()
-    if uk and "unorouter.com" not in DEFAULT_BASE_URL:
-        out.append({"base": "https://api.unorouter.com/v1", "model": "gemini-3.1-flash-lite:free",
-                    "key": uk, "gap": 63.0})
-    return out or [{"base": DEFAULT_BASE_URL, "model": DEFAULT_MODEL, "key": API_KEY, "gap": 63.0}]
+    return out
