@@ -38,7 +38,7 @@ def run_difficulty(
             if num == correct_number:
                 true_pos = pos
         setups.append({"order": order, "true_pos": true_pos})
-    log(f"asking {runs} difficulty runs (3 at a time)...")
+    log(f"asking {runs} difficulty runs...")
     calls = [
         dict(
             prompt=PROMPT.format(question=question, options="\n".join(
@@ -51,7 +51,7 @@ def run_difficulty(
         )
         for i, s in enumerate(setups)
     ]
-    results = client.chat_many(calls, workers=3)
+    results = client.chat_many(calls, workers=1)
     out = []
     correct_picks = 0
     for i, (raw, s) in enumerate(zip(results, setups), 1):

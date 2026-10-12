@@ -20,6 +20,7 @@ _gap = max(1.0, config.RATE_LIMIT_SECONDS)
 _floor = _gap
 _next_at = 0.0
 _ok_streak = 0
+_last_throttle = 0.0
 
 
 def _respect_rate_limit() -> None:
@@ -44,10 +45,14 @@ def _on_success() -> None:
 
 
 def _on_throttle(hint_seconds: int | None = None) -> None:
-    global _gap, _ok_streak
+    global _gap, _ok_streak, _last_throttle
     with _lock:
-        target = hint_seconds if hint_seconds else 5
-        _gap = min(30.0, max(5.0, _gap * 3, float(target)))
+        now = time.time()
+        if now - _last_throttle < 60:
+            return
+        _last_throttle = now
+        target = float(hint_seconds) if hint_seconds else 5.0
+        _gap = min(30.0, max(_gap * 2 if _gap > _floor else 5.0, target))
         _ok_streak = 0
         log(f"server throttled us — slowing to {_gap:.0f}s between calls (auto-recovers)")
 
