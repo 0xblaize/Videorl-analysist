@@ -43,49 +43,28 @@ videorl run videoname.mp4
    ```
 4. (Optional, for on-screen text in slides) Install [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) and add it to PATH. Skip if unsure — the tool works without it.
 
-## Install — macOS
+## Install — one line (Linux / macOS)
 
-1. Install **Python 3.11+** (comes with recent macOS, or use [python.org](https://www.python.org/downloads/) or `brew install python3`).
-2. Open **Terminal** and run:
-   ```bash
-   cd ~/path/to/videorl-analyst
-   python3 -m pip install --user -e .
-   ```
-3. Check it works:
-   ```bash
-   videorl --help
-   ```
-4. If the system blocks the command: `python3 -m pip install --user --break-system-packages -e .`
-5. (Optional) `brew install tesseract` for OCR. Works fine without it.
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xblaize/Videorl-analysist/main/install.sh | bash
+```
 
-*Note: iPhone/iPad (iOS) cannot run this. macOS computers can.*
+Needs python 3.11+ and git. Everything goes into `~/.videorl` (private environment, no sudo, system untouched). **ffmpeg is included automatically.**
 
-## Install — Linux
+Update later: `videorl --update`. Uninstall: `rm -rf ~/.videorl ~/.local/bin/videorl`.
 
-1. Install Python 3.11+, pip, and git:
-   ```bash
-   sudo apt update && sudo apt install -y python3 python3-pip git
-   ```
-2. Install the tool:
-   ```bash
-   cd ~/path/to/videorl-analyst
-   python3 -m pip install --user -e .
-   ```
-   If pip refuses (externally managed environment):
-   ```bash
-   python3 -m pip install --user --break-system-packages -e .
-   ```
-3. Make sure `~/.local/bin` is on your PATH (add to `~/.bashrc` or `~/.zshrc` if needed):
-   ```bash
-   export PATH="$HOME/.local/bin:$PATH"
-   ```
-4. Check it works:
-   ```bash
-   videorl --help
-   ```
-5. (Optional) `sudo apt install tesseract-ocr` for OCR.
+## Install — manual (from a clone)
 
-**ffmpeg is included automatically** — no separate install on any system.
+```bash
+git clone https://github.com/0xblaize/Videorl-analysist.git
+cd Videorl-analysist
+python3 -m venv ~/.videorl/venv
+~/.videorl/venv/bin/pip install -e .
+mkdir -p ~/.local/bin && ln -sf ~/.videorl/venv/bin/videorl ~/.local/bin/videorl
+videorl --help
+```
+
+(On Debian/Ubuntu if venv is missing: `sudo apt install python3-venv`. Optional OCR: `sudo apt install tesseract-ocr` / `brew install tesseract` — works fine without it.)
 
 ---
 

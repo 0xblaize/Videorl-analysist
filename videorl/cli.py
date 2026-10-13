@@ -230,6 +230,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="videorl", description="VideoRL v7 symbolic video question pipeline")
     ap.add_argument("--update", action="store_true",
                     help="pull the latest version from github")
+    try:
+        from importlib.metadata import version as _v
+        ap.add_argument("--version", action="version", version=f"videorl {_v('videorl')}")
+    except Exception:
+        pass
     sub = ap.add_subparsers(dest="cmd", required=False)
 
     a = sub.add_parser("analyze", help="stage 1: deep analysis + symbolic readings")
