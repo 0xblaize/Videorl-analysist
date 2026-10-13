@@ -29,42 +29,42 @@ videorl run videoname.mp4
 
 ---
 
-## Install — Windows
+## Install (needs Python 3.11+)
 
-1. Install **Python 3.11 or newer** from [python.org](https://www.python.org/downloads/). On the installer, tick **"Add python.exe to PATH"**.
-2. Open **PowerShell** and run:
-   ```powershell
-   cd C:\path\to\videorl-analyst
-   py -m pip install --user -e .
-   ```
-3. Check it works:
-   ```powershell
-   videorl --help
-   ```
-4. (Optional, for on-screen text in slides) Install [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) and add it to PATH. Skip if unsure — the tool works without it.
-
-## Install — one line (Linux / macOS)
+**One line — Linux / macOS:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0xblaize/Videorl-analysist/main/install.sh | bash
 ```
 
-Needs python 3.11+ and git. Everything goes into `~/.videorl` (private environment, no sudo, system untouched). **ffmpeg is included automatically.**
+Installs into `~/.videorl` (private environment, no sudo, system untouched). **ffmpeg is included automatically.**
 
-Update later: `videorl --update`. Uninstall: `rm -rf ~/.videorl ~/.local/bin/videorl`.
+**With pip — any OS, straight from GitHub (no clone needed):**
 
-## Install — manual (from a clone)
+```bash
+python3 -m pip install git+https://github.com/0xblaize/Videorl-analysist.git
+```
+
+Windows PowerShell: `py -m pip install git+https://github.com/0xblaize/Videorl-analysist.git`
+
+**With pip — from a local clone:**
 
 ```bash
 git clone https://github.com/0xblaize/Videorl-analysist.git
 cd Videorl-analysist
-python3 -m venv ~/.videorl/venv
-~/.videorl/venv/bin/pip install -e .
-mkdir -p ~/.local/bin && ln -sf ~/.videorl/venv/bin/videorl ~/.local/bin/videorl
-videorl --help
+python3 -m pip install .
 ```
 
-(On Debian/Ubuntu if venv is missing: `sudo apt install python3-venv`. Optional OCR: `sudo apt install tesseract-ocr` / `brew install tesseract` — works fine without it.)
+Check it works:
+
+```bash
+videorl --help
+videorl --version
+```
+
+Update later: `videorl --update`. Uninstall: `python3 -m pip uninstall videorl` (plus `rm -rf ~/.videorl` if you used the one-line installer).
+
+(Optional OCR for on-screen text: `sudo apt install tesseract-ocr` / [Tesseract for Windows](https://github.com/UB-Mannheim/tesseract/wiki) — works fine without it.)
 
 ---
 
